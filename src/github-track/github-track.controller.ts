@@ -1,7 +1,5 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Req } from '@nestjs/common';
 import { GithubTrackService } from './github-track.service';
-import { CreateGithubTrackDto } from './dto/create-github-track.dto';
-import { UpdateGithubTrackDto } from './dto/update-github-track.dto';
 import axios from 'axios';
 import { Request } from 'express';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
@@ -10,8 +8,10 @@ import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 export class GithubTrackController {
   constructor(private readonly githubTrackService: GithubTrackService) {}
   private readonly baseUrl = 'https://api.github.com';
-  private readonly token = process.env.GITHUB_TOKEN;
+  private readonly token = process.env.GIHUB_BOT_TOKEN;
   private readonly API_KEY = process.env.GEMINI_API_KEY;
+  private readonly owner = "tanmayhire26";
+  private readonly repo = "cashflo";
 
  
 
@@ -21,14 +21,19 @@ export class GithubTrackController {
   ) {
     try {
       const eventType = req.headers['x-github-event'];
-      if (eventType === 'pull_request' && req.body.pull_request.title !== "bot") {
+                console.log('Github event triggered event type = ', eventType, "req body of the event", req.body); 
+                // const latestCommit = await this.githubTrackService.getLatestCommit(this.repo, req.body?.pull_request?.number ?? req.body?.number);
+      
+      // Extract the sender's username
+      if (eventType === 'pull_request' && req.body.sender.login !== "tanmayhire"
+        // req.body.pull_request.title !== "bot"
+        // req.body.pull_request.user.login !== "tanmayhire" && senderUsername !== "tanmayhire"
+      ) {
           const pullRequestData = req.body;
           console.log('Pull Request Event Received:', pullRequestData);         
-          const baseUrl = 'https://api.github.com';
-          const owner = "tanmayhire26";
-          const repo="cashflo";
+         
           const pullNumber = pullRequestData?.number;
-           const url = `${baseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}.diff`;
+           const url = `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${pullNumber}.diff`;
            const response = await axios.get(url, {
         headers: {
           'Authorization': `token ${this.token}`,
@@ -37,7 +42,7 @@ export class GithubTrackController {
       });
       // console.log("Diff Data =============================================  ", JSON.stringify(response.data, null, 4));
       
-      const urlFilesChanged = `${baseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/files`;
+      const urlFilesChanged = `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${pullNumber}/files`;
            const responseFilesChanged = await axios.get(urlFilesChanged, {
         headers: {
           'Authorization': `token ${this.token}`,
@@ -48,13 +53,15 @@ export class GithubTrackController {
        const filesChanged = responseFilesChanged.data; // This will contain the diff as text
 
       const fileContents = await Promise.all(filesChanged.map(async (file) => {
-        const content = await this.getFileContent(owner, repo, file.filename);
+        const content = await this.getFileContent(this.owner, this.repo, file.filename);
         const qualityAnalysisResponse = await this.generateGeminiPromptForCodeQualityAndGetResponse({code_content: content});
         return { filename: file.filename, qualityAnalysis: JSON.stringify(JSON.parse(qualityAnalysisResponse)) };
     }));
 
+    await this.githubTrackService.savePRAnalysisScores({userName: req.body?.sender?.login, fileContents, prNumber: pullNumber});
+
     const refactoredFileContents = await Promise.all(fileContents.map(async (file) => {
-      const content = await this.getFileContent(owner, repo, file.filename);
+      const content = await this.getFileContent(this.owner, this.repo, file.filename);
       const refactoredContent = await this.getRefactoredCodeFromGeminiPrompt({codeContent: content});
       return { fileName: file.filename, content: refactoredContent };
     }))
@@ -65,16 +72,21 @@ export class GithubTrackController {
     console.log("File name and its quality analaysis", {userName: pullRequestData?.pull_request?.user?.login, fileContentsAnalysis: fileContents});
     console.log("Refactored content according to file ================================================================ ", refactoredFileContents);
  // Create a new branch
- let branchName = "bot-refactor-" + pullNumber;
-    await this.githubTrackService.createBranch(owner, repo, branchName);
+ let branchName = "bot-refactor-" + pullNumber + Date.now();
+    await this.githubTrackService.createBranch(this.owner, this.repo, branchName);
     
 //     // Commit changes
-    await this.githubTrackService.commitChanges(owner, repo, branchName, refactoredFileContents);
+    await this.githubTrackService.commitChanges(this.owner, this.repo, branchName, refactoredFileContents);
 
 //     // Create pull request
-    await this.githubTrackService.createPullRequest(owner, repo, 'bot', 'This PR includes refactored files.', branchName, "master");
+    await this.githubTrackService.createPullRequest(this.owner, this.repo, 'bot', 'This PR includes refactored files.', branchName, "master");
     
     return { message: 'Pull request created successfully.' };  
+  } else if(eventType === 'pull_request_review_comment' && req.body.action === "created") {
+    console.log("review comment created");
+    const reviewCommentAddedData = req.body;
+    console.log("Review comment added data == = = == = ", reviewCommentAddedData);
+    await this.githubTrackService.handleReviewCommentAdded(reviewCommentAddedData);
   }
 
     } catch (error) {
@@ -87,15 +99,12 @@ export class GithubTrackController {
                 const baseUrl = 'https://api.github.com';
 
        const url = `${baseUrl}/repos/${owner}/${repo}/contents/${path}`;
-      //  console.log("path.............................", path);
     const response = await axios.get(url, {
       headers: {
         'Authorization': `token ${this.token}`,
         'Accept': 'application/vnd.github.v3.raw',
       },
     });
-    console.log("1 File content changed ", response.data);
-    console.log("typeof TYPE OF file content retrieved from github == == == == ==", typeof response.data);
     return response.data;
     } catch (error) {
       throw error;
@@ -158,10 +167,10 @@ export class GithubTrackController {
             "minimum": 1,
             "maximum": 100
           },
-          "agg_score": {
-            "type": SchemaType.NUMBER,
-            "description": "Aggregate score of the above parameters"
-          },
+          // "agg_score": {
+          //   "type": SchemaType.NUMBER,
+          //   "description": "Aggregate score of the above parameters"
+          // },
           "total_score": {
             "type": SchemaType.NUMBER,
             "description": "Total score based on specific criteria"
@@ -178,7 +187,6 @@ export class GithubTrackController {
           "complexity", 
           "adherence_to_solid_principles", 
           "documentation_quality", 
-          "agg_score", 
           "total_score"
         ]
       };

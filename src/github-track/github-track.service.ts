@@ -2,11 +2,23 @@ import { Injectable } from '@nestjs/common';
 import { CreateGithubTrackDto } from './dto/create-github-track.dto';
 import { UpdateGithubTrackDto } from './dto/update-github-track.dto';
 import axios from 'axios';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { UserPrScoreRepository } from 'src/user-pr-score/user-pr-score.repository';
 
 @Injectable()
 export class GithubTrackService {
-  private readonly token = process.env.GITHUB_TOKEN;
+  constructor(
+      private readonly userPrScoreRepo: UserPrScoreRepository
+
+  ){
+
+  }
+  private readonly token = process.env.GITHUB_BOT_TOKEN;
+  private readonly ownerToken = process.env.GITHUB_OWNER_TOKEN;
   private readonly API_KEY = process.env.GEMINI_API_KEY;
+  private readonly baseURL = 'https://api.github.com';
+  private readonly owner = "tanmayhire26";
+  private readonly repo = "cashflo";
  async createBranch(owner: string, repo: string, branchName: string): Promise<void> {
   try {
   console.log("creating branch ....  started......owner, repo and branchNAame", owner,repo,branchName)
@@ -75,7 +87,7 @@ export class GithubTrackService {
               console.log("in commit changes ....... before axios call commit 3")
 
     const commitResponse = await axios.post(`${this.baseURL}/repos/${owner}/${repo}/git/commits`, {
-      message: 'bot',
+      message: 'refactored code by bot',
       tree: treeResponse.data.sha,
       parents: [data.object.sha],
     }, {
@@ -96,7 +108,7 @@ export class GithubTrackService {
         Accept: 'application/vnd.github.v3+json',
       },
     });
-                  console.log("in commit changes ....... after  axios call branmch ref update   4")
+    console.log("in commit changes ....... after  axios call branmch ref update   4")
 
   }
 
@@ -114,5 +126,134 @@ export class GithubTrackService {
       },
     });
     console.log("After axios xcall .. .. . . ")
+  }
+
+  async handleReviewCommentAdded (reviewCommentAddedPayload) {
+    try {
+
+      const { pull_request: { number: pullRequestNumber, head: {ref} }, repository: { full_name: repo }, comment: { body, diff_hunk, path } } = reviewCommentAddedPayload;
+      console.log("branch name = ", ref);
+      console.log("filename or path wher changes are expected = ", path);
+      console.log("comment body = ", body);
+      console.log("Comment on lines ie diff_hunk = ", diff_hunk);
+      //get the file content from the path
+      const fileContent = await this.getFileContent(path);
+      //prompt with the file content thediff_hunk and the comment body to gemini to get the refactored code
+      const prompt = `I want you to refactor a code of a file whose code content is ${fileContent} 
+       according to the comment added to a PR on github which is ${body} 
+       and the diff_hunk which is ${diff_hunk} will indicates which part of the code needs to be changed 
+        and refactor code ony for that part of the file in response keeping other code in the file intact unless necessary and no other explantory text. Please provide the refactored code without any Markdown formatting or additional comments. I also dont want the three backticks followed by typescript in the beginning and the again the three back ticks at the end of the generated response`;
+      const refactoredCode = await this.getRefactoredCodeFromGeminiPrompt(prompt);
+      console.log("refactored_code = ", refactoredCode);
+      //commit the refactored code to the branch
+      await this.commitChanges(this.owner, this.repo, ref, [ { fileName: path, content: refactoredCode } ]);
+      console.log("Pr comment changes commited");
+      return;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+   async getFileContent(path) {
+    try {
+      console.log("token of github in get file content file -== ==  ", this.token);
+       const url = `${this.baseURL}/repos/${this.owner}/${this.repo}/contents/${path}`;
+    const response = await axios.get(url, {
+      headers: {
+        'Authorization': `token ${this.token}`,
+        'Accept': 'application/vnd.github.v3.raw',
+      },
+    });
+    console.log("Axios call that gets file content successful, file content = ", response.data);
+    return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async getRefactoredCodeFromGeminiPrompt (prompt) {
+    try {
+      const genAI = new GoogleGenerativeAI(this.API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash"})
+      const result = await model.generateContent(prompt);
+      return await this.cleanRefactorPromptReponse(result.response.text());
+    } catch (error){
+      throw error;
+    }
+  }
+
+  async cleanRefactorPromptReponse(cleanedCode) {
+    try {
+       
+
+    // Remove Markdown code block delimiters
+   cleanedCode = cleanedCode.replace(/```typescript\n/, '').replace(/```/, '').trim();
+
+    return cleanedCode; // Return the cleaned code
+    } catch (error) {
+      throw error;
+    }
+  }
+
+   async getLatestCommit(repoFullName: string, prNumber: number,) {
+    try {
+        // Fetch commits for the pull request
+        console.log("getting latest commit the url =  ",`https://api.github.com/repos/${this.owner}/${repoFullName}/pulls/${prNumber}/commits`);
+    const response = await axios.get(`https://api.github.com/repos/${this.owner}/${repoFullName}/pulls/${prNumber}/commits`, {
+      headers: {
+        // Authorization: `token ${this.ownerToken}`, // Replace with your token
+        Authorization: `token ${this.ownerToken}`, // Replace with your token
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+    console.log("response of latet commit = ", response);
+
+    // Return the latest commit (first in array)
+    return response.data[0]; // The first commit is the latest one
+    } catch  (error)  {
+      console.log(error);
+      throw error;
+    }
+  
+  }
+
+  async savePRAnalysisScores ({userName, fileContents, prNumber}) {
+    try {
+      let combinedScore = {
+        readability:0,
+        maintainability:0,
+        performance:0,
+        proneness_to_error:0,
+        test_coverage:0,
+        modularity:0,
+        scalability:0,
+        complexity:0,
+        adherence_to_solid_principles:0,
+        documentation_quality:0,
+        total_score: 0,
+      }
+      
+      for(let fc of fileContents) {
+        let {qualityAnalysis} = fc;
+        let qualityAnalysisObj = JSON.parse(qualityAnalysis);
+        for(let key in JSON.parse(qualityAnalysis)) {
+          console.log("quality Score for the key = ", key," is ",qualityAnalysisObj[key]," with type = ", typeof qualityAnalysisObj[key]);
+          combinedScore[key] += Number(qualityAnalysisObj[key]);
+        }
+        console.log("combined score for every iteration = ", combinedScore);
+      }
+      for (let key in combinedScore) {
+        combinedScore[key] = Math.floor(Number(combinedScore[key]) / fileContents.length);
+      }
+      console.log({userName, score: combinedScore, prNumber});
+      const savedUserPrScore = await this.userPrScoreRepo.create({userName, score: combinedScore, prNumber});
+      console.log("savedUserPrScore = ", savedUserPrScore);
+      return savedUserPrScore;
+
+      
+    } catch (error) {
+      console.log(error);
+      throw error;
+    }
   }
 }
