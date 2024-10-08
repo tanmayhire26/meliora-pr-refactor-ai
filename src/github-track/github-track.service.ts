@@ -256,4 +256,71 @@ export class GithubTrackService {
       throw error;
     }
   }
+
+
+  async createPrComment(body) {
+    try {
+      const {action, pull_request} = body;
+      const repoOwner = pull_request.base.repo.owner.login;
+      const repoName = pull_request.base.repo.name;
+      const prNumber = pull_request.number;
+
+      //get file lists that were changed in the PR
+
+      const filesChanged = await this.getChangedFiles(repoOwner, repoName, prNumber);
+
+    } catch (error) {
+      console.log(error.message);
+      throw error;
+    }
+  }
+
+  async getChangedFiles(owner: string, repo: string, prNumber: number) {
+  const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/files`, {
+    headers: {
+      Authorization: `token ${this.token}`,
+      Accept: 'application/vnd.github.v3+json',
+    },
+  });
+  return response.data; // Contains an array of changed files
+}
+
+async getFileContents(owner: string, repo: string, path: string,) {
+  const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+    headers: {
+      Authorization: `token ${this.token}`,
+      Accept: 'application/vnd.github.v3.raw',
+    },
+  });
+  return Buffer.from(response.data.content, 'base64').toString(); // Decode Base64 content
+}
+
+async createTestCasesForPR(filenames, pullNumber) {
+  try {
+    let testCasesFilesContent = [];
+    for(let fname of filenames) {
+      console.log("filename = ", fname);
+      if(fname.includes('.ts') && !fname.includes('.spec.ts')) {
+        let fileContent = await this.getFileContent(fname);
+        let prompt = `Generate a jest test cases file for the following file contents of a nestJs project ${fileContent}. Only give the code in the response without any other comments or unwanted text. the response should be without any Markdown formatting or additional comments. I also dont want the three backticks followed by typescript in the beginning and the again the three back ticks at the end of the generated response`;
+        let testCasesCodeResponse = await this.getRefactoredCodeFromGeminiPrompt(prompt);
+        testCasesFilesContent.push({fileName: fname.replace(/\.ts$/, '.spec.ts'), content: testCasesCodeResponse});
+      } 
+     
+    }
+    // Create a new branch
+    let branchName = "bot-test-cases-" + pullNumber + Date.now();
+    await this.createBranch(this.owner, this.repo, branchName);
+    
+     // Commit changes
+    await this.commitChanges(this.owner, this.repo, branchName, testCasesFilesContent);
+
+     // Create pull request
+    await this.createPullRequest(this.owner, this.repo, 'bot-testcases', 'This PR includes refactored files.', branchName, "master");
+    console.log("PR with test cases created successfully");
+  } catch (error) {
+    console.log(error);
+    throw error
+  }
+}
 }

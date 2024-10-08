@@ -8,7 +8,7 @@ import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 export class GithubTrackController {
   constructor(private readonly githubTrackService: GithubTrackService) {}
   private readonly baseUrl = 'https://api.github.com';
-  private readonly token = process.env.GIHUB_BOT_TOKEN;
+  private readonly token = process.env.GITHUB_BOT_TOKEN;
   private readonly API_KEY = process.env.GEMINI_API_KEY;
   private readonly owner = "tanmayhire26";
   private readonly repo = "cashflo";
@@ -21,7 +21,7 @@ export class GithubTrackController {
   ) {
     try {
       const eventType = req.headers['x-github-event'];
-                console.log('Github event triggered event type = ', eventType, "req body of the event", req.body); 
+        console.log('Github event triggered event type = ', eventType, "req body of the event", req.body); 
                 // const latestCommit = await this.githubTrackService.getLatestCommit(this.repo, req.body?.pull_request?.number ?? req.body?.number);
       
       // Extract the sender's username
@@ -29,8 +29,10 @@ export class GithubTrackController {
         // req.body.pull_request.title !== "bot"
         // req.body.pull_request.user.login !== "tanmayhire" && senderUsername !== "tanmayhire"
       ) {
+        
           const pullRequestData = req.body;
-          console.log('Pull Request Event Received:', pullRequestData);         
+          console.log('Pull Request Event Received:', pullRequestData);        
+          
          
           const pullNumber = pullRequestData?.number;
            const url = `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${pullNumber}.diff`;
@@ -59,6 +61,8 @@ export class GithubTrackController {
     }));
 
     await this.githubTrackService.savePRAnalysisScores({userName: req.body?.sender?.login, fileContents, prNumber: pullNumber});
+    /////////////////////////////////////////TEST CASES CREATION////////////////////////
+    await this.githubTrackService.createTestCasesForPR(fileContents.map((f)=>f.filename), pullNumber);
 
     const refactoredFileContents = await Promise.all(fileContents.map(async (file) => {
       const content = await this.getFileContent(this.owner, this.repo, file.filename);
@@ -266,6 +270,24 @@ export class GithubTrackController {
 
     return cleanedCode; // Return the cleaned code
     } catch (error) {
+      throw error;
+    }
+  }
+
+
+  @Post('create-pr-comment')
+  async createPrComment(
+    @Req() req: Request
+  ) {
+    try {
+      const eventType = req.headers['x-github-event'];
+      if(eventType === 'pull_request' && req.body.sender.login !== "tanmayhire") {
+        console.log("Pull request Data = ", req.body);
+        await this.githubTrackService.createPrComment(req.body);
+        console.log("Pr comment added successfully by bot");
+      }
+    } catch (error) {
+      console.log(error.message);
       throw error;
     }
   }
