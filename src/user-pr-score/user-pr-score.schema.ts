@@ -26,8 +26,11 @@ export class UserPrScore extends Document {
     @Prop({ default: Date.now })
     createdAt: Date;
 
-    @Prop({ required: true, type: Object }) 
+    @Prop({ required: false, type: Object }) 
     score: Score;
+
+    @Prop({ required: false, type: Object })
+    analysis: any;
 }
 
 export const UserPrScoreSchema = SchemaFactory.createForClass(UserPrScore);

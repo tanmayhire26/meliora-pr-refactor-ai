@@ -62,10 +62,10 @@ export class GithubTrackController {
 
     await this.githubTrackService.savePRAnalysisScores({userName: req.body?.sender?.login, fileContents, prNumber: pullNumber});
     /////////////////////////////////////////TEST CASES CREATION////////////////////////
-    await this.githubTrackService.createTestCasesForPR(fileContents.map((f)=>f.filename), pullNumber);
+    await this.githubTrackService.createTestCasesForPR(fileContents.map((f)=>f.filename), pullNumber, req.body.pull_request.head.ref);
 
     const refactoredFileContents = await Promise.all(fileContents.map(async (file) => {
-      const content = await this.getFileContent(this.owner, this.repo, file.filename);
+      const content = await this.githubTrackService.getFileContent(file.filename, req.body.pull_request.head.ref);
       const refactoredContent = await this.getRefactoredCodeFromGeminiPrompt({codeContent: content});
       return { fileName: file.filename, content: refactoredContent };
     }))
@@ -90,7 +90,7 @@ export class GithubTrackController {
     console.log("review comment created");
     const reviewCommentAddedData = req.body;
     console.log("Review comment added data == = = == = ", reviewCommentAddedData);
-    await this.githubTrackService.handleReviewCommentAdded(reviewCommentAddedData);
+    await this.githubTrackService.handleReviewCommentAdded(reviewCommentAddedData, req.body.pull_request.head.ref);
   }
 
     } catch (error) {
@@ -285,6 +285,39 @@ export class GithubTrackController {
         console.log("Pull request Data = ", req.body);
         await this.githubTrackService.createPrComment(req.body);
         console.log("Pr comment added successfully by bot");
+      }
+    } catch (error) {
+      console.log(error.message);
+      throw error;
+    }
+  }
+
+  @Post('dev-analysis')
+  async getDeveloperCodingAbilityAnalysis(
+    @Req() req: Request
+  ) {
+    try {
+       const eventType = req.headers['x-github-event'];
+        console.log('Github event triggered event type = ', eventType, "req body of the event", req.body); 
+                
+      if (eventType === 'pull_request' && req.body.sender.login !== "tanmayhire") {
+         const pullRequestData = req.body;
+          console.log('Pull Request Event Received:', pullRequestData);        
+          const pullNumber = pullRequestData?.number;
+          
+          const urlFilesChanged = `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${pullNumber}/files`;
+          const responseFilesChanged = await axios.get(urlFilesChanged, {
+            headers: {
+              'Authorization': `token ${this.token}`,
+              'Accept': 'application/vnd.github.v3.diff',
+            },
+          });
+          console.log("REveived respons efile changed.......................")
+        const filesChanged = responseFilesChanged.data; 
+        const devAnalsysis = await this.githubTrackService.doCodingAbilityAnalysis({filesChanged, prNumber: pullNumber, userName: req.body?.sender?.login, branchName: pullRequestData?.pull_request?.head?.ref});
+        console.log("dev analysis = ", devAnalsysis);
+        return devAnalsysis;
+
       }
     } catch (error) {
       console.log(error.message);

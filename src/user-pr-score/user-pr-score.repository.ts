@@ -27,4 +27,14 @@ export class UserPrScoreRepository {
     async delete(id: string): Promise<UserPrScore | null> {
         return this.userPrScoreModel.findByIdAndDelete(id).exec();
     }
+
+    async getAllDataForUsername(username: string) {
+        try {
+            const userData = await this.userPrScoreModel.find({ userName: username }).exec();
+            return userData;
+        } catch (error) {
+            console.log(error.response.data.message);
+            throw error;
+        }
+    }
 }

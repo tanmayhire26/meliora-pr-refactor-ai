@@ -7,5 +7,6 @@ import { UserPrScoreModule } from 'src/user-pr-score/user-pr-score.module';
   imports: [UserPrScoreModule ],
   controllers: [GithubTrackController],
   providers: [GithubTrackService,],
+  exports: [GithubTrackService],
 })
 export class GithubTrackModule {}
