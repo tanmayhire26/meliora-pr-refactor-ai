@@ -156,7 +156,6 @@ export class GithubTrackService {
 
    async getFileContent(path, branchName) {
     try {
-      console.log("token of github in get file content file -== ==  ", this.token);
        const url = `${this.baseURL}/repos/${this.owner}/${this.repo}/contents/${path}?ref=${branchName}`;
        console.log("url in getFileContent .. .. .. .", url)
     const response = await axios.get(url, {
