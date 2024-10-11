@@ -31,6 +31,18 @@ export class UserPrScoreController {
   remove(@Param('id') id: string) {
     return this.userPrScoreService.remove(+id);
   }
+  @Get('performance/:username')
+  async getDataForUsername (
+    @Param('username') username: string
+  ) {
+    try {
+      const userData = await this.userPrScoreService.getAllDataForUserName(username);
+      return userData;
+    } catch (error) {
+      console.log(error.response.data.message);
+      throw error;
+    }
+  }
   @Get('analysis-summary/:username')
   async getAnalysisSummaryForUsername (
     @Param('username') username: string

@@ -8,8 +8,8 @@ import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 export class GithubTrackController {
   constructor(private readonly githubTrackService: GithubTrackService) {}
   private readonly baseUrl = 'https://api.github.com';
-  private readonly token = process.env.GITHUB_BOT_TOKEN;
-  private readonly API_KEY = process.env.GEMINI_API_KEY;
+  private readonly token = "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";
+  private readonly API_KEY = "AIzaSyD9L7RbsfJPNPxnEqro4iWMnzZkaW31qoU";
   private readonly owner = "tanmayhire26";
   private readonly repo = "cashflo";
 
@@ -35,13 +35,13 @@ export class GithubTrackController {
           
          
           const pullNumber = pullRequestData?.number;
-           const url = `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${pullNumber}.diff`;
-           const response = await axios.get(url, {
-        headers: {
-          'Authorization': `token ${this.token}`,
-          'Accept': 'application/vnd.github.v3.diff',
-        },
-      });
+      //      const url = `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${pullNumber}.diff`;
+      //      const response = await axios.get(url, {
+      //   headers: {
+      //     'Authorization': `token ${this.token}`,
+      //     'Accept': 'application/vnd.github.v3.diff',
+      //   },
+      // });
       // console.log("Diff Data =============================================  ", JSON.stringify(response.data, null, 4));
       
       const urlFilesChanged = `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${pullNumber}/files`;
@@ -51,16 +51,20 @@ export class GithubTrackController {
           'Accept': 'application/vnd.github.v3.diff',
         },
       });
-      // console.log("))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))   FILEs CHANMGED ))))))))))))))))))))))))))   ", responseFilesChanged);
+      console.log("))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))   FILEs CHANMGED ))))))))))))))))))))))))))   ", responseFilesChanged);
        const filesChanged = responseFilesChanged.data; // This will contain the diff as text
 
       const fileContents = await Promise.all(filesChanged.map(async (file) => {
-        const content = await this.getFileContent(this.owner, this.repo, file.filename);
-        const qualityAnalysisResponse = await this.generateGeminiPromptForCodeQualityAndGetResponse({code_content: content});
-        return { filename: file.filename, qualityAnalysis: JSON.stringify(JSON.parse(qualityAnalysisResponse)) };
+        // const content = await this.getFileContent(this.owner, this.repo, file.filename);
+        // const qualityAnalysisResponse = await this.generateGeminiPromptForCodeQualityAndGetResponse({code_content: content});
+        return { filename: file.filename, 
+          // qualityAnalysis: JSON.stringify(JSON.parse(qualityAnalysisResponse)) 
+        };
     }));
 
-    await this.githubTrackService.savePRAnalysisScores({userName: req.body?.sender?.login, fileContents, prNumber: pullNumber});
+    // await this.githubTrackService.savePRAnalysisScores({userName: req.body?.sender?.login, fileContents, prNumber: pullNumber});
+    const devAnalsysis = await this.githubTrackService.doCodingAbilityAnalysis({filesChanged, prNumber: pullNumber, userName: req.body?.sender?.login, branchName: pullRequestData?.pull_request?.head?.ref});
+    console.log("dev analsysis done")
     /////////////////////////////////////////TEST CASES CREATION////////////////////////
     await this.githubTrackService.createTestCasesForPR(fileContents.map((f)=>f.filename), pullNumber, req.body.pull_request.head.ref);
 

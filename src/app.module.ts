@@ -5,6 +5,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { GithubTrackModule } from './github-track/github-track.module';
 import { UserPrScoreModule } from './user-pr-score/user-pr-score.module';
 import { ConfigModule } from '@nestjs/config';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { ConfigModule } from '@nestjs/config';
           isGlobal: true,  
           envFilePath: '.env', 
     }),
+        UsersModule,
 
   ],
   controllers: [AppController],

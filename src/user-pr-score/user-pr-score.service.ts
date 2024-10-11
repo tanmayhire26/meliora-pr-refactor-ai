@@ -11,7 +11,7 @@ export class UserPrScoreService {
   ) {
 
   }
-    private readonly API_KEY = process.env.GEMINI_API_KEY;
+    private readonly API_KEY = "AIzaSyD9L7RbsfJPNPxnEqro4iWMnzZkaW31qoU";
 
 
   create(createUserPrScoreDto: CreateUserPrScoreDto) {
@@ -63,5 +63,15 @@ export class UserPrScoreService {
   } catch (error) {
     console.log(error.response.data.message);
   }
+}
+
+async getAllDataForUserName(username: string) {
+  try {
+    const userData = await this.userPrScoreRepository.getAllDataForUsername(username);
+    return userData;
+  } catch (error) {
+    console.log(error.response.data.message);
+    throw error;
+  } 
 }
 }
