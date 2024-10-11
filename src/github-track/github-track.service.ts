@@ -13,9 +13,9 @@ export class GithubTrackService {
   ){
 
   }
-  private readonly token = "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";
-  private readonly ownerToken = "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";
-  private readonly API_KEY = "AIzaSyD9L7RbsfJPNPxnEqro4iWMnzZkaW31qoU";
+  private readonly token = process.env.GITHUB_BOT_TOKEN;
+  private readonly ownerToken = process.env.GITHUB_OWNER_TOKEN;
+  private readonly API_KEY = process.env.GEMINI_API_KEY;
   private readonly baseURL = 'https://api.github.com';
   private readonly owner = "tanmayhire26";
   private readonly repo = "cashflo";

@@ -8,8 +8,8 @@ import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 export class GithubTrackController {
   constructor(private readonly githubTrackService: GithubTrackService) {}
   private readonly baseUrl = 'https://api.github.com';
-  private readonly token = "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";
-  private readonly API_KEY = "AIzaSyD9L7RbsfJPNPxnEqro4iWMnzZkaW31qoU";
+  private readonly token = process.env.GITHUB_BOT_TOKEN;
+  private readonly API_KEY = process.env.GEMINI_API_KEY;
   private readonly owner = "tanmayhire26";
   private readonly repo = "cashflo";
 

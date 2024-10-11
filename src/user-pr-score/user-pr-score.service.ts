@@ -11,7 +11,7 @@ export class UserPrScoreService {
   ) {
 
   }
-    private readonly API_KEY = "AIzaSyD9L7RbsfJPNPxnEqro4iWMnzZkaW31qoU";
+    private readonly API_KEY = process.env.GEMINI_API_KEY;
 
 
   create(createUserPrScoreDto: CreateUserPrScoreDto) {
